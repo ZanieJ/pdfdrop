@@ -1,12 +1,69 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Pallet ID Lookup</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+<head>
+  <meta charset="UTF-8">
+  <title>Supabase NDA Lookup</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 2rem; background: #f9f9f9; }
+    textarea { width: 100%; height: 150px; padding: 1rem; font-size: 1rem; }
+    button { padding: 0.5rem 1rem; font-size: 1rem; margin-top: 1rem; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1.5rem; }
+    th, td { border: 1px solid #ccc; padding: 0.75rem; text-align: left; }
+    th { background-color: #eee; }
+  </style>
+</head>
+<body>
+  <h2>Paste 18-digit Pallet IDs</h2>
+  <textarea id="palletInput" placeholder="Enter 18-digit pallet IDs, one per line..."></textarea>
+  <br>
+  <button onclick="fetchResults()">Search</button>
+  <table id="resultsTable" style="display:none;">
+    <thead>
+      <tr>
+        <th>Pallet ID</th>
+        <th>Document Name</th>
+        <th>Page Number</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script type="module">
+    const SUPABASE_URL = "https://cassouhzovotgdhzssqg.supabase.co";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhc3NvdWh6b3ZvdGdkaHpzc3FnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkxMTg5MjYsImV4cCI6MjA2NDY5NDkyNn0.dNg51Yn9aplsyAP9kvsEQOTHWb64edsAk5OqiynEZlk";
+
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    async function fetchResults() {
+      const input = document.getElementById("palletInput").value.trim();
+      const ids = input.split(/\r?\n/).map(id => id.trim()).filter(id => id.length > 0);
+
+      const tableBody = document.querySelector("#resultsTable tbody");
+      tableBody.innerHTML = "";
+
+      if (ids.length === 0) return;
+
+      document.getElementById("resultsTable").style.display = "table";
+
+      for (const id of ids) {
+        const { data, error } = await supabase
+          .from("NDAs")
+          .select("document_name, page_number")
+          .eq("pallet_id", id);
+
+        if (error || !data || data.length === 0) {
+          const row = `<tr><td>${id}</td><td colspan="2" style="color:red;">Not found</td></tr>`;
+          tableBody.insertAdjacentHTML("beforeend", row);
+        } else {
+          data.forEach(rowData => {
+            const row = `<tr><td>${id}</td><td>${rowData.document_name}</td><td>${rowData.page_number}</td></tr>`;
+            tableBody.insertAdjacentHTML("beforeend", row);
+          });
+        }
+      }
+    }
+  </script>
+</body>
 </html>
