@@ -66,13 +66,15 @@ const App = () => {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop, accept: { "application/pdf": [] } });
 
   const uploadToSupabase = async () => {
-    const { error } = await supabase.from("NDAs").insert(results);
-    if (error) {
-      alert("Upload failed: " + error.message);
-    } else {
-      alert("Upload successful!");
-    }
-  };
+  const { data, error } = await supabase.from("NDAs").insert(results);
+  if (error) {
+    console.error("Supabase Insert Error:", error);
+    alert("Upload failed: " + error.message);
+  } else {
+    console.log("Inserted data:", data);
+    alert("Upload successful!");
+  }
+};
 
   return (
     <div className="p-4 max-w-4xl mx-auto">
