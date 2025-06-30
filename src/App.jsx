@@ -18,13 +18,9 @@ const App = () => {
   const onDrop = useCallback(async (acceptedFiles) => {
     setProcessing(true);
 
-    const worker = await createWorker(
-      {
-        langPath: "https://tessdata.projectnaptha.com/4.0.0_best",
-      },
-      (m) => console.log("📦 Tesseract message:", m)
-    );
-
+    const worker = await createWorker({
+      langPath: "https://tessdata.projectnaptha.com/4.0.0_best",
+    });
     await worker.loadLanguage("ocrb");
     await worker.initialize("ocrb");
 
