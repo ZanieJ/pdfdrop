@@ -5,7 +5,6 @@ import * as pdfjsLib from "pdfjs-dist";
 import { createClient } from "@supabase/supabase-js";
 
 import pdfWorker from "pdfjs-dist/build/pdf.worker?worker";
-
 pdfjsLib.GlobalWorkerOptions.workerPort = new pdfWorker();
 
 const supabase = createClient(
@@ -13,23 +12,26 @@ const supabase = createClient(
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhc3NvdWh6b3ZvdGdkaHpzc3FnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkxMTg5MjYsImV4cCI6MjA2NDY5NDkyNn0.dNg51Yn9aplsyAP9kvsEQOTHWb64edsAk5OqiynEZlk"
 );
 
+// Improved Pallet ID extractor
+const extractPalletIds = (text) => {
+  const roughMatches = text.match(/\d{10,}/g) || [];
+  const cleaned = roughMatches
+    .map((id) => id.replace(/[^0-9]/g, "").replace(/O/g, "0"))
+    .filter((id) => id.length === 18);
+
+  return [...new Set(cleaned)];
+};
+
 const App = () => {
   const [results, setResults] = useState([]);
   const [processing, setProcessing] = useState(false);
 
-  const extractPalletIds = (text) => {
-  const roughMatches = text.match(/\d{10,}/g) || [];
-
-  const cleaned = roughMatches
-    .map((id) => id.replace(/[^0-9]/g, '').replace(/O/g, '0')) // clean non-digits, fix 'O' -> '0'
-    .filter((id) => id.length === 18);
-
-  return [...new Set(cleaned)]; // return unique IDs
-};
-
   const onDrop = useCallback(async (acceptedFiles) => {
     setProcessing(true);
     let finalResults = [];
+
+    // Reuse a single Tesseract worker
+    const worker = await createWorker("eng");
 
     for (const file of acceptedFiles) {
       try {
@@ -45,11 +47,14 @@ const App = () => {
           canvas.width = viewport.width;
           await page.render({ canvasContext: context, viewport }).promise;
 
-          const worker = await createWorker("eng");
-          const { data: { text } } = await worker.recognize(canvas);
-          await worker.terminate();
+          const {
+            data: { text },
+          } = await worker.recognize(canvas);
+
+          console.log(`OCR Page ${pageNum}:`, text); // DEBUG: show raw OCR output
 
           const ids = extractPalletIds(text);
+
           ids.forEach((id) => {
             finalResults.push({
               pallet_id: id,
@@ -64,22 +69,37 @@ const App = () => {
       }
     }
 
-    setResults(finalResults);
+    await worker.terminate();
+
+    // Remove duplicates by pallet_id + document + page
+    const uniqueResults = Array.from(
+      new Map(
+        finalResults.map((r) => [
+          `${r.pallet_id}-${r.document_name}-${r.page_number}`,
+          r,
+        ])
+      ).values()
+    );
+
+    setResults(uniqueResults);
     setProcessing(false);
   }, []);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop, accept: { "application/pdf": [] } });
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: { "application/pdf": [] },
+  });
 
   const uploadToSupabase = async () => {
-  const { data, error } = await supabase.from("NDAs").insert(results);
-  if (error) {
-    console.error("Supabase Insert Error:", error);
-    alert("Upload failed: " + error.message);
-  } else {
-    console.log("Inserted data:", data);
-    alert("Upload successful!");
-  }
-};
+    const { data, error } = await supabase.from("NDAs").insert(results);
+    if (error) {
+      console.error("Supabase Insert Error:", error);
+      alert("Upload failed: " + error.message);
+    } else {
+      console.log("Inserted data:", data);
+      alert("Upload successful!");
+    }
+  };
 
   return (
     <div className="p-4 max-w-4xl mx-auto">
