@@ -12,29 +12,17 @@ const supabase = createClient(
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhc3NvdWh6b3ZvdGdkaHpzc3FnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkxMTg5MjYsImV4cCI6MjA2NDY5NDkyNn0.dNg51Yn9aplsyAP9kvsEQOTHWb64edsAk5OqiynEZlk"
 );
 
-// ✅ Safe pallet ID extractor
-const extractPalletIds = (text) => {
-  if (typeof text !== "string") return [];
-  const matches = text.match(/\d{10,}/g);
-  if (!Array.isArray(matches)) return [];
-  return matches
-    .map((id) => id.replace(/[^0-9]/g, "").replace(/O/g, "0"))
-    .filter((id) => id.length === 18);
-};
-
 const App = () => {
-  const [results, setResults] = useState([]);
   const [processing, setProcessing] = useState(false);
 
   const onDrop = useCallback(async (acceptedFiles) => {
     setProcessing(true);
-    let finalResults = [];
 
     const worker = await createWorker(
       {
         langPath: "https://tessdata.projectnaptha.com/4.0.0_best",
       },
-      (m) => console.log(m)
+      (m) => console.log("📦 Tesseract message:", m)
     );
 
     await worker.loadLanguage("ocrb");
@@ -54,58 +42,39 @@ const App = () => {
           canvas.width = viewport.width;
           await page.render({ canvasContext: context, viewport }).promise;
 
-          // ✅ Convert canvas to base64 image
           const imageDataUrl = canvas.toDataURL();
 
           let rawResult;
           try {
             rawResult = await worker.recognize(imageDataUrl);
+            console.log(`✅ OCR result for ${file.name} page ${pageNum}:`, rawResult);
           } catch (err) {
-            console.error("Tesseract failed:", err);
+            console.error("❌ Tesseract recognize() failed:", err);
             continue;
           }
 
-          const text = rawResult?.data?.text || "";
+          const text = rawResult?.data?.text;
+          if (typeof text !== "string") {
+            console.warn("⚠️ No valid text output on page", pageNum);
+            continue;
+          }
 
-          // ✅ Debug OCR output
-          const debugBox = document.createElement("div");
-          debugBox.innerText = `--- PAGE ${pageNum} ---\n\n${text}`;
-          debugBox.style.whiteSpace = "pre-wrap";
-          debugBox.style.border = "1px solid #ccc";
-          debugBox.style.margin = "20px 0";
-          debugBox.style.padding = "10px";
-          debugBox.style.fontSize = "12px";
-          document.body.appendChild(debugBox);
-
-          const ids = extractPalletIds(text);
-
-          ids.forEach((id) => {
-            finalResults.push({
-              pallet_id: id,
-              document_name: file.name,
-              page_number: pageNum,
-            });
-          });
+          // Show OCR result visibly
+          const box = document.createElement("div");
+          box.innerText = `--- PAGE ${pageNum} OCR OUTPUT ---\n\n${text}`;
+          box.style.whiteSpace = "pre-wrap";
+          box.style.border = "1px solid #999";
+          box.style.margin = "1rem 0";
+          box.style.padding = "1rem";
+          box.style.fontSize = "12px";
+          document.body.appendChild(box);
         }
       } catch (err) {
-        alert("Error reading PDF: " + err.message);
-        console.error(err);
+        console.error("❌ Failed to read/process PDF:", err);
       }
     }
 
     await worker.terminate();
-
-    // ✅ Deduplicate entries
-    const unique = Array.from(
-      new Map(
-        finalResults.map((r) => [
-          `${r.pallet_id}-${r.document_name}-${r.page_number}`,
-          r,
-        ])
-      ).values()
-    );
-
-    setResults(unique);
     setProcessing(false);
   }, []);
 
@@ -114,21 +83,9 @@ const App = () => {
     accept: { "application/pdf": [] },
   });
 
-  const uploadToSupabase = async () => {
-    const { data, error } = await supabase.from("NDAs").insert(results);
-    if (error) {
-      console.error("Upload Error:", error);
-      alert("Upload failed: " + error.message);
-    } else {
-      alert("Upload successful!");
-      console.log("Inserted:", data);
-    }
-  };
-
   return (
-    <div className="p-4 max-w-4xl mx-auto">
-      <h1 className="text-3xl font-bold mb-6">Melissa OCR Pallet ID Extractor</h1>
-
+    <div className="p-4 max-w-3xl mx-auto">
+      <h1 className="text-2xl font-bold mb-4">OCR Debugger</h1>
       <div
         {...getRootProps()}
         className={`border-4 border-dashed rounded-xl p-10 text-center transition ${
@@ -136,43 +93,14 @@ const App = () => {
         }`}
       >
         <input {...getInputProps()} />
-        {isDragActive ? (
-          <p className="text-blue-500">Drop the PDFs here...</p>
-        ) : (
-          <p className="text-gray-600">Drag & drop PDF files here</p>
-        )}
+        <p className="text-gray-600">
+          {isDragActive
+            ? "Drop the PDF here..."
+            : "Drag & drop a PDF here to debug OCR output"}
+        </p>
       </div>
 
-      {processing && <p className="mt-4 text-yellow-600">Processing PDFs...</p>}
-
-      {results.length > 0 && (
-        <>
-          <table className="table-auto w-full border mt-6 text-sm">
-            <thead className="bg-gray-100">
-              <tr>
-                <th className="border px-2 py-1">Pallet ID</th>
-                <th className="border px-2 py-1">Document</th>
-                <th className="border px-2 py-1">Page</th>
-              </tr>
-            </thead>
-            <tbody>
-              {results.map((r, i) => (
-                <tr key={i}>
-                  <td className="border px-2 py-1">{r.pallet_id}</td>
-                  <td className="border px-2 py-1">{r.document_name}</td>
-                  <td className="border px-2 py-1">{r.page_number}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <button
-            onClick={uploadToSupabase}
-            className="mt-4 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-          >
-            Upload to Supabase
-          </button>
-        </>
-      )}
+      {processing && <p className="mt-4 text-yellow-600">Processing PDF…</p>}
     </div>
   );
 };
