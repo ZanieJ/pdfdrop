@@ -12,11 +12,11 @@ const supabase = createClient(
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhc3NvdWh6b3ZvdGdkaHpzc3FnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkxMTg5MjYsImV4cCI6MjA2NDY5NDkyNn0.dNg51Yn9aplsyAP9kvsEQOTHWb64edsAk5OqiynEZlk"
 );
 
-// ✅ Safe ID extractor
+// ✅ Safe pallet ID extractor
 const extractPalletIds = (text) => {
-  const matches = text?.match(/\d{10,}/g);
+  if (typeof text !== "string") return [];
+  const matches = text.match(/\d{10,}/g);
   if (!Array.isArray(matches)) return [];
-
   return matches
     .map((id) => id.replace(/[^0-9]/g, "").replace(/O/g, "0"))
     .filter((id) => id.length === 18);
@@ -54,24 +54,30 @@ const App = () => {
           canvas.width = viewport.width;
           await page.render({ canvasContext: context, viewport }).promise;
 
-          // ✅ Convert canvas to image
+          // ✅ Convert canvas to base64 image
           const imageDataUrl = canvas.toDataURL();
 
-          const {
-            data: { text },
-          } = await worker.recognize(imageDataUrl); // ✅ Only pass image string
+          let rawResult;
+          try {
+            rawResult = await worker.recognize(imageDataUrl);
+          } catch (err) {
+            console.error("Tesseract failed:", err);
+            continue;
+          }
 
-          const ids = extractPalletIds(text); // ✅ Pass plain string to extractor
+          const text = rawResult?.data?.text || "";
 
-          // ✅ Optional debug OCR output
+          // ✅ Debug OCR output
           const debugBox = document.createElement("div");
-          debugBox.innerText = `--- PAGE ${pageNum} OCR ---\n\n${text}`;
+          debugBox.innerText = `--- PAGE ${pageNum} ---\n\n${text}`;
           debugBox.style.whiteSpace = "pre-wrap";
           debugBox.style.border = "1px solid #ccc";
           debugBox.style.margin = "20px 0";
           debugBox.style.padding = "10px";
           debugBox.style.fontSize = "12px";
           document.body.appendChild(debugBox);
+
+          const ids = extractPalletIds(text);
 
           ids.forEach((id) => {
             finalResults.push({
@@ -89,7 +95,7 @@ const App = () => {
 
     await worker.terminate();
 
-    // ✅ Remove duplicates
+    // ✅ Deduplicate entries
     const unique = Array.from(
       new Map(
         finalResults.map((r) => [
