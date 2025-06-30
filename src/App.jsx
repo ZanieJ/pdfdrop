@@ -18,9 +18,14 @@ const App = () => {
   const [processing, setProcessing] = useState(false);
 
   const extractPalletIds = (text) => {
-    const regex = /\b\d{18}\b/g;
-    return [...text.matchAll(regex)].map((match) => match[0]);
-  };
+  const roughMatches = text.match(/\d{10,}/g) || [];
+
+  const cleaned = roughMatches
+    .map((id) => id.replace(/[^0-9]/g, '').replace(/O/g, '0')) // clean non-digits, fix 'O' -> '0'
+    .filter((id) => id.length === 18);
+
+  return [...new Set(cleaned)]; // return unique IDs
+};
 
   const onDrop = useCallback(async (acceptedFiles) => {
     setProcessing(true);
