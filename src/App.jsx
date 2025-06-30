@@ -12,13 +12,16 @@ const supabase = createClient(
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhc3NvdWh6b3ZvdGdkaHpzc3FnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkxMTg5MjYsImV4cCI6MjA2NDY5NDkyNn0.dNg51Yn9aplsyAP9kvsEQOTHWb64edsAk5OqiynEZlk"
 );
 
-// Robust 18-digit pallet ID extraction
+// ✅ Final safe version to extract 18-digit IDs
 const extractPalletIds = (text) => {
-  return (
-    (text.match(/\d{10,}/g) || [])
-      .map((id) => id.replace(/[^0-9]/g, "").replace(/O/g, "0"))
-      .filter((id) => id.length === 18)
-  );
+  const roughMatches = text?.match(/\d{10,}/g);
+  if (!Array.isArray(roughMatches)) return [];
+
+  const cleaned = roughMatches
+    .map((id) => id.replace(/[^0-9]/g, "").replace(/O/g, "0"))
+    .filter((id) => id.length === 18);
+
+  return [...new Set(cleaned)];
 };
 
 const App = () => {
@@ -29,12 +32,12 @@ const App = () => {
     setProcessing(true);
     let finalResults = [];
 
-    // ✅ Create Tesseract worker with OCR-B language and CDN langPath
+    // ✅ Tesseract with ocrb language
     const worker = await createWorker(
       {
         langPath: "https://tessdata.projectnaptha.com/4.0.0_best",
       },
-      (m) => console.log(m) // ✅ logger as second argument (avoids crash)
+      (m) => console.log(m)
     );
 
     await worker.loadLanguage("ocrb");
@@ -47,7 +50,7 @@ const App = () => {
 
         for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
           const page = await pdf.getPage(pageNum);
-          const viewport = page.getViewport({ scale: 3.0 }); // ✅ High-res render
+          const viewport = page.getViewport({ scale: 3.0 });
           const canvas = document.createElement("canvas");
           const context = canvas.getContext("2d");
           canvas.height = viewport.height;
@@ -58,7 +61,7 @@ const App = () => {
             data: { text },
           } = await worker.recognize(canvas);
 
-          // ✅ Debug: View OCR output on screen
+          // ✅ OCR output viewer
           const ocrDiv = document.createElement("div");
           ocrDiv.innerText = `--- OCR TEXT PAGE ${pageNum} ---\n\n${text}`;
           ocrDiv.style.whiteSpace = "pre-wrap";
@@ -86,7 +89,7 @@ const App = () => {
 
     await worker.terminate();
 
-    // ✅ Remove duplicate (same ID, doc, page)
+    // ✅ Deduplicate results
     const uniqueResults = Array.from(
       new Map(
         finalResults.map((r) => [
