@@ -30,10 +30,12 @@ const App = () => {
     let finalResults = [];
 
     // Create Tesseract worker with OCR-B model support
-    const worker = await createWorker({
-      logger: (m) => console.log(m),
-      langPath: "https://tessdata.projectnaptha.com/4.0.0_best", // Where to load ocrb.traineddata
-    });
+    const worker = await createWorker(
+    {
+      langPath: "https://tessdata.projectnaptha.com/4.0.0_best",
+    },
+    (m) => console.log(m) // ✅ logger as 2nd arg
+    );
 
     await worker.loadLanguage("ocrb");
     await worker.initialize("ocrb");
