@@ -57,9 +57,10 @@ const App = () => {
           canvas.width = viewport.width;
           await page.render({ canvasContext: context, viewport }).promise;
 
+          const imageDataUrl = canvas.toDataURL();
           const {
             data: { text },
-          } = await worker.recognize(canvas);
+          } = await worker.recognize(imageDataUrl);
 
           // ✅ OCR output viewer
           const ocrDiv = document.createElement("div");
