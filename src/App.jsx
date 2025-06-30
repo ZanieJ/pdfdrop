@@ -12,16 +12,14 @@ const supabase = createClient(
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhc3NvdWh6b3ZvdGdkaHpzc3FnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkxMTg5MjYsImV4cCI6MjA2NDY5NDkyNn0.dNg51Yn9aplsyAP9kvsEQOTHWb64edsAk5OqiynEZlk"
 );
 
-// ✅ Final safe version to extract 18-digit IDs
+// ✅ Safe ID extractor
 const extractPalletIds = (text) => {
-  const roughMatches = text?.match(/\d{10,}/g);
-  if (!Array.isArray(roughMatches)) return [];
+  const matches = text?.match(/\d{10,}/g);
+  if (!Array.isArray(matches)) return [];
 
-  const cleaned = roughMatches
+  return matches
     .map((id) => id.replace(/[^0-9]/g, "").replace(/O/g, "0"))
     .filter((id) => id.length === 18);
-
-  return [...new Set(cleaned)];
 };
 
 const App = () => {
@@ -32,7 +30,6 @@ const App = () => {
     setProcessing(true);
     let finalResults = [];
 
-    // ✅ Tesseract with ocrb language
     const worker = await createWorker(
       {
         langPath: "https://tessdata.projectnaptha.com/4.0.0_best",
@@ -57,22 +54,24 @@ const App = () => {
           canvas.width = viewport.width;
           await page.render({ canvasContext: context, viewport }).promise;
 
+          // ✅ Convert canvas to image
           const imageDataUrl = canvas.toDataURL();
+
           const {
             data: { text },
-          } = await worker.recognize(imageDataUrl);
+          } = await worker.recognize(imageDataUrl); // ✅ Only pass image string
 
-          // ✅ OCR output viewer
-          const ocrDiv = document.createElement("div");
-          ocrDiv.innerText = `--- OCR TEXT PAGE ${pageNum} ---\n\n${text}`;
-          ocrDiv.style.whiteSpace = "pre-wrap";
-          ocrDiv.style.border = "1px solid #ccc";
-          ocrDiv.style.margin = "20px 0";
-          ocrDiv.style.padding = "10px";
-          ocrDiv.style.fontSize = "12px";
-          document.body.appendChild(ocrDiv);
+          const ids = extractPalletIds(text); // ✅ Pass plain string to extractor
 
-          const ids = extractPalletIds(text);
+          // ✅ Optional debug OCR output
+          const debugBox = document.createElement("div");
+          debugBox.innerText = `--- PAGE ${pageNum} OCR ---\n\n${text}`;
+          debugBox.style.whiteSpace = "pre-wrap";
+          debugBox.style.border = "1px solid #ccc";
+          debugBox.style.margin = "20px 0";
+          debugBox.style.padding = "10px";
+          debugBox.style.fontSize = "12px";
+          document.body.appendChild(debugBox);
 
           ids.forEach((id) => {
             finalResults.push({
@@ -83,15 +82,15 @@ const App = () => {
           });
         }
       } catch (err) {
-        alert("Failed processing PDF: " + err.message);
+        alert("Error reading PDF: " + err.message);
         console.error(err);
       }
     }
 
     await worker.terminate();
 
-    // ✅ Deduplicate results
-    const uniqueResults = Array.from(
+    // ✅ Remove duplicates
+    const unique = Array.from(
       new Map(
         finalResults.map((r) => [
           `${r.pallet_id}-${r.document_name}-${r.page_number}`,
@@ -100,7 +99,7 @@ const App = () => {
       ).values()
     );
 
-    setResults(uniqueResults);
+    setResults(unique);
     setProcessing(false);
   }, []);
 
@@ -112,11 +111,11 @@ const App = () => {
   const uploadToSupabase = async () => {
     const { data, error } = await supabase.from("NDAs").insert(results);
     if (error) {
-      console.error("Supabase Insert Error:", error);
+      console.error("Upload Error:", error);
       alert("Upload failed: " + error.message);
     } else {
-      console.log("Inserted data:", data);
       alert("Upload successful!");
+      console.log("Inserted:", data);
     }
   };
 
