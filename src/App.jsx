@@ -40,8 +40,16 @@ const App = () => {
           canvas.width = viewport.width;
           await page.render({ canvasContext: context, viewport }).promise;
 
-          const worker = await createWorker("eng");
-          const { data: { text } } = await worker.recognize(canvas);
+          const worker = await createWorker({
+            langPath: "https://tessdata.projectnaptha.com/4.0.0_best",
+          });
+
+          await worker.loadLanguage("ocrb+eng");
+          await worker.initialize("ocrb+eng");
+  
+          const imageData = canvas.toDataURL("image/png");
+          const { data: { text } } = await worker.recognize(imageData);
+
           await worker.terminate();
 
           const ids = extractPalletIds(text);
