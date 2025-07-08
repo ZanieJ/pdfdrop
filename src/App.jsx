@@ -5,6 +5,7 @@ import * as pdfjsLib from "pdfjs-dist";
 import { createClient } from "@supabase/supabase-js";
 
 import pdfWorker from "pdfjs-dist/build/pdf.worker?worker";
+
 pdfjsLib.GlobalWorkerOptions.workerPort = new pdfWorker();
 
 const supabase = createClient(
@@ -32,29 +33,18 @@ const App = () => {
 
         for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
           const page = await pdf.getPage(pageNum);
-          const viewport = page.getViewport({ scale: 3.5 }); // 🔧 High DPI
+          const viewport = page.getViewport({ scale: 2.0 });
           const canvas = document.createElement("canvas");
           const context = canvas.getContext("2d");
           canvas.height = viewport.height;
           canvas.width = viewport.width;
           await page.render({ canvasContext: context, viewport }).promise;
 
-          const worker = await createWorker({
-            langPath: "https://tessdata.projectnaptha.com/4.0.0_best",
-          });
-
-          await worker.loadLanguage("ocrb+eng");
-          await worker.initialize("ocrb+eng");
-
-          const imageData = canvas.toDataURL("image/png");
-          const {
-            data: { text },
-          } = await worker.recognize(imageData);
-
+          const worker = await createWorker("eng");
+          const { data: { text } } = await worker.recognize(canvas);
           await worker.terminate();
 
-          const cleanedText = text.replace(/\s+/g, ''); // 🔧 Normalize spaces
-          const ids = extractPalletIds(cleanedText);
+          const ids = extractPalletIds(text);
           ids.forEach((id) => {
             finalResults.push({
               pallet_id: id,
@@ -73,10 +63,7 @@ const App = () => {
     setProcessing(false);
   }, []);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: { "application/pdf": [] },
-  });
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop, accept: { "application/pdf": [] } });
 
   const uploadToSupabase = async () => {
     const { error } = await supabase.from("NDAs").insert(results);
