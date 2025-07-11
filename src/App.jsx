@@ -18,7 +18,7 @@ const App = () => {
   const [processing, setProcessing] = useState(false);
 
   const extractPalletIds = (text) => {
-    const regex = /\b\d{18}\b/g;
+    const regex = /\d{18}/g; // Loosened to allow matching even without strict word boundaries
     return [...text.matchAll(regex)].map((match) => match[0]);
   };
 
@@ -33,7 +33,7 @@ const App = () => {
 
         for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
           const page = await pdf.getPage(pageNum);
-          const viewport = page.getViewport({ scale: 2.0 });
+          const viewport = page.getViewport({ scale: 3.0 }); // ↑ increased for better clarity
           const canvas = document.createElement("canvas");
           const context = canvas.getContext("2d");
           canvas.height = viewport.height;
@@ -44,7 +44,16 @@ const App = () => {
           const { data: { text } } = await worker.recognize(canvas);
           await worker.terminate();
 
-          const cleanedText = text.replace(/[O]/g, "0").replace(/[^0-9\s]/g, "");
+          // Clean and normalize OCR text before applying regex
+          const cleanedText = text
+            .replace(/[O]/g, "0")          // Common OCR fix: capital O → 0
+            .replace(/[Il|]/g, "1")        // Common OCR fix: I, l, | → 1
+            .replace(/\s+/g, "")           // Remove all whitespace
+            .replace(/[^0-9]/g, "");       // Keep only digits
+
+          console.log(`Page ${pageNum} raw OCR:\n`, text); // Optional: debug original OCR
+          console.log(`Page ${pageNum} cleaned OCR:\n`, cleanedText); // Optional: debug cleaned version
+
           const ids = extractPalletIds(cleanedText);
 
           ids.forEach((id) => {
@@ -65,7 +74,10 @@ const App = () => {
     setProcessing(false);
   }, []);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop, accept: { "application/pdf": [] } });
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: { "application/pdf": [] },
+  });
 
   const uploadToSupabase = async () => {
     const { error } = await supabase.from("NDAs").insert(results);
