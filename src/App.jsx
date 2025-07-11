@@ -3,18 +3,18 @@ import { useDropzone } from "react-dropzone";
 import { createWorker } from "tesseract.js";
 import * as pdfjsLib from "pdfjs-dist";
 import { createClient } from "@supabase/supabase-js";
+
+// Correct way to import PDF.js worker
 import pdfWorker from "pdfjs-dist/build/pdf.worker?worker";
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
-// Setup PDF.js
-pdfjsLib.GlobalWorkerOptions.workerPort = new pdfWorker();
-
-// Setup Supabase
+// Supabase setup
 const supabase = createClient(
   "https://cassouhzovotgdhzssqg.supabase.co",
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhc3NvdWh6b3ZvdGdkaHpzc3FnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkxMTg5MjYsImV4cCI6MjA2NDY5NDkyNn0.dNg51Yn9aplsyAP9kvsEQOTHWb64edsAk5OqiynEZlk"
 );
 
-// Extract pallet IDs using flexible regex
+// Extract pallet IDs from OCR/PDF text
 const extractPalletIds = (text) => {
   const regex = /\(00\)?(\d{18})|\b\d{18}\b/g;
   const matches = [...text.matchAll(regex)].map((m) => m[1] || m[0]);
@@ -30,11 +30,15 @@ const App = () => {
     let finalResults = [];
 
     for (const file of acceptedFiles) {
+      console.log("📄 Processing file:", file.name);
+
       try {
         const arrayBuffer = await file.arrayBuffer();
         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
         for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+          console.log("📄 Page:", pageNum);
+
           const page = await pdf.getPage(pageNum);
           const viewport = page.getViewport({ scale: 2.0 });
           const canvas = document.createElement("canvas");
@@ -44,15 +48,24 @@ const App = () => {
           await page.render({ canvasContext: context, viewport }).promise;
 
           // OCR mode
-          const worker = await createWorker("eng");
-          const { data: { text: ocrText } } = await worker.recognize(canvas);
+          const worker = await createWorker({
+            logger: (m) => console.log("🔍 OCR:", m)
+          });
+          await worker.loadLanguage("eng");
+          await worker.initialize("eng");
+          const {
+            data: { text: ocrText }
+          } = await worker.recognize(canvas);
           await worker.terminate();
-          const ocrIds = extractPalletIds(ocrText);
 
-          // Embedded PDF text mode (good for tables)
+          const ocrIds = extractPalletIds(ocrText);
+          console.log("📦 OCR IDs:", ocrIds);
+
+          // PDF embedded text mode
           const textContent = await page.getTextContent();
           const pdfText = textContent.items.map((item) => item.str).join(" ");
           const tableIds = extractPalletIds(pdfText);
+          console.log("📊 Table IDs:", tableIds);
 
           // Merge and deduplicate
           const allIds = [...new Set([...ocrIds, ...tableIds])];
@@ -61,12 +74,12 @@ const App = () => {
             finalResults.push({
               pallet_id: id,
               document_name: file.name,
-              page_number: pageNum,
+              page_number: pageNum
             });
           });
         }
       } catch (err) {
-        alert("Failed processing PDF: " + err.message);
+        alert("❌ Failed processing PDF: " + err.message);
         console.error(err);
       }
     }
@@ -83,9 +96,9 @@ const App = () => {
   const uploadToSupabase = async () => {
     const { error } = await supabase.from("NDAs").insert(results);
     if (error) {
-      alert("Upload failed: " + error.message);
+      alert("❌ Upload failed: " + error.message);
     } else {
-      alert("Upload successful!");
+      alert("✅ Upload successful!");
     }
   };
 
@@ -129,6 +142,7 @@ const App = () => {
               ))}
             </tbody>
           </table>
+
           <button
             onClick={uploadToSupabase}
             className="mt-4 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
