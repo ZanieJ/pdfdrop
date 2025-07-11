@@ -19,31 +19,31 @@ const App = () => {
 
   const extractPalletIds = (text) => {
   const ids = new Set();
-  const lines = text.split(/\r?\n/);
 
-  // 1. Try match from whole lines
-  for (let line of lines) {
-    line = line.replace(/[O]/g, "0").replace(/[Il|]/g, "1");
-    const match = line.match(/\b\d{18}\b/);
-    if (match) {
-      ids.add(match[0]);
-    }
-  }
+  const cleaned = text
+    .replace(/[O]/g, "0")
+    .replace(/[Il|]/g, "1");
 
-  // 2. Try combining numeric chunks to reconstruct split IDs
-  const digitsOnly = text.match(/\d+/g) || [];
+  // 1. First: match full 18-digit numbers
+  const directMatches = cleaned.match(/\b\d{18}\b/g) || [];
+  directMatches.forEach((id) => ids.add(id));
 
-  for (let i = 0; i < digitsOnly.length - 2; i++) {
-    const combined = digitsOnly[i] + digitsOnly[i + 1] + digitsOnly[i + 2];
-    if (combined.length === 18 && /^\d{18}$/.test(combined)) {
-      ids.add(combined);
-      i += 2; // Skip next two to avoid overlap
+  // 2. Then: try to combine adjacent number chunks to make 18 digits
+  const digitChunks = cleaned.match(/\d{3,}/g) || []; // only meaningful chunks
+
+  for (let i = 0; i < digitChunks.length; i++) {
+    let combined = digitChunks[i];
+    for (let j = i + 1; j < digitChunks.length && combined.length < 18; j++) {
+      combined += digitChunks[j];
+      if (combined.length === 18) {
+        ids.add(combined);
+        break; // only one valid combo per i
+      }
     }
   }
 
   return [...ids];
 };
-
 
   const onDrop = useCallback(async (acceptedFiles) => {
     setProcessing(true);
