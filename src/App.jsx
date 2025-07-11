@@ -18,32 +18,9 @@ const App = () => {
   const [processing, setProcessing] = useState(false);
 
   const extractPalletIds = (text) => {
-  const ids = new Set();
-
-  const cleaned = text
-    .replace(/[O]/g, "0")
-    .replace(/[Il|]/g, "1");
-
-  // 1. First: match full 18-digit numbers
-  const directMatches = cleaned.match(/\b\d{18}\b/g) || [];
-  directMatches.forEach((id) => ids.add(id));
-
-  // 2. Then: try to combine adjacent number chunks to make 18 digits
-  const digitChunks = cleaned.match(/\d{3,}/g) || []; // only meaningful chunks
-
-  for (let i = 0; i < digitChunks.length; i++) {
-    let combined = digitChunks[i];
-    for (let j = i + 1; j < digitChunks.length && combined.length < 18; j++) {
-      combined += digitChunks[j];
-      if (combined.length === 18) {
-        ids.add(combined);
-        break; // only one valid combo per i
-      }
-    }
-  }
-
-  return [...ids];
-};
+    const regex = /\b\d{18}\b/g;
+    return [...text.matchAll(regex)].map((match) => match[0]);
+  };
 
   const onDrop = useCallback(async (acceptedFiles) => {
     setProcessing(true);
@@ -56,7 +33,7 @@ const App = () => {
 
         for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
           const page = await pdf.getPage(pageNum);
-          const viewport = page.getViewport({ scale: 4.0 }); // Higher scale for better OCR
+          const viewport = page.getViewport({ scale: 2.0 });
           const canvas = document.createElement("canvas");
           const context = canvas.getContext("2d");
           canvas.height = viewport.height;
@@ -64,45 +41,10 @@ const App = () => {
           await page.render({ canvasContext: context, viewport }).promise;
 
           const worker = await createWorker("eng");
-          await worker.setParameters({
-            tessedit_char_whitelist: "0123456789", // Only digits
-          });
-
           const { data: { text } } = await worker.recognize(canvas);
           await worker.terminate();
 
-          console.log(`🔍 OCR Output (Page ${pageNum}):`, text);
-
-          const cleanedText = text
-            .replace(/[O]/g, "0")
-            .replace(/[Il|]/g, "1");
-
-          // 1. Extract pallet IDs from OCR
-          let ids = extractPalletIds(cleanedText);
-
-          // 2. Extract pallet IDs from native PDF text
-          try {
-            const textContent = await page.getTextContent();
-            const rawText = textContent.items.map(item => item.str).join(" ");
-            const cleanedNativeText = rawText
-              .replace(/[O]/g, "0")
-              .replace(/[Il|]/g, "1");
-
-            const nativeIds = extractPalletIds(cleanedNativeText);
-
-            // Add native IDs that are not already captured via OCR
-            nativeIds.forEach((id) => {
-              if (!ids.includes(id)) {
-                ids.push(id);
-              }
-            });
-
-  console.log(`📄 Native textContent found:`, nativeIds);
-} catch (err) {
-  console.warn("⚠️ Failed native textContent extract:", err.message);
-}
-
-
+          const ids = extractPalletIds(text);
           ids.forEach((id) => {
             finalResults.push({
               pallet_id: id,
@@ -121,10 +63,7 @@ const App = () => {
     setProcessing(false);
   }, []);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: { "application/pdf": [] },
-  });
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop, accept: { "application/pdf": [] } });
 
   const uploadToSupabase = async () => {
     const { error } = await supabase.from("NDAs").insert(results);
