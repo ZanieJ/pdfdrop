@@ -18,9 +18,17 @@ const App = () => {
   const [processing, setProcessing] = useState(false);
 
   const extractPalletIds = (text) => {
-    const regex = /\(00\)\d{18}/g;
-    return [...text.matchAll(regex)].map((match) => match[0]);
-  };
+  let regex;
+
+  if (text.includes("(00)")) {
+    regex = /\(00\)(\d{18})/g;
+    return [...text.matchAll(regex)].map((m) => m[1]); // extract only the digits
+  } else {
+    regex = /\b\d{18}\b/g;
+    return [...text.matchAll(regex)].map((m) => m[0]);
+  }
+};
+
 
   const onDrop = useCallback(async (acceptedFiles) => {
     setProcessing(true);
