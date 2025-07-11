@@ -21,18 +21,29 @@ const App = () => {
   const ids = new Set();
   const lines = text.split(/\r?\n/);
 
+  // 1. Try match from whole lines
   for (let line of lines) {
     line = line.replace(/[O]/g, "0").replace(/[Il|]/g, "1");
-
-    // Match the first 18-digit number in the line
     const match = line.match(/\b\d{18}\b/);
     if (match) {
       ids.add(match[0]);
     }
   }
 
+  // 2. Try combining numeric chunks to reconstruct split IDs
+  const digitsOnly = text.match(/\d+/g) || [];
+
+  for (let i = 0; i < digitsOnly.length - 2; i++) {
+    const combined = digitsOnly[i] + digitsOnly[i + 1] + digitsOnly[i + 2];
+    if (combined.length === 18 && /^\d{18}$/.test(combined)) {
+      ids.add(combined);
+      i += 2; // Skip next two to avoid overlap
+    }
+  }
+
   return [...ids];
 };
+
 
   const onDrop = useCallback(async (acceptedFiles) => {
     setProcessing(true);
