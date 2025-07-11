@@ -44,7 +44,9 @@ const App = () => {
           const { data: { text } } = await worker.recognize(canvas);
           await worker.terminate();
 
-          const ids = extractPalletIds(text);
+          const cleanedText = text.replace(/[O]/g, "0").replace(/[^0-9\s]/g, "");
+          const ids = extractPalletIds(cleanedText);
+
           ids.forEach((id) => {
             finalResults.push({
               pallet_id: id,
