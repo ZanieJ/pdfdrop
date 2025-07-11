@@ -18,9 +18,21 @@ const App = () => {
   const [processing, setProcessing] = useState(false);
 
   const extractPalletIds = (text) => {
-    const regex = /\d{18}/g;
-    return [...text.matchAll(regex)].map((match) => match[0]);
-  };
+  const ids = new Set();
+  const lines = text.split(/\r?\n/);
+
+  for (let line of lines) {
+    line = line.replace(/[O]/g, "0").replace(/[Il|]/g, "1");
+
+    // Match the first 18-digit number in the line
+    const match = line.match(/\b\d{18}\b/);
+    if (match) {
+      ids.add(match[0]);
+    }
+  }
+
+  return [...ids];
+};
 
   const onDrop = useCallback(async (acceptedFiles) => {
     setProcessing(true);
