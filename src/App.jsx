@@ -33,7 +33,7 @@ const App = () => {
 
         for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
           const page = await pdf.getPage(pageNum);
-          const viewport = page.getViewport({ scale: 2.5 });
+          const viewport = page.getViewport({ scale: 4.0 }); // Higher scale for better OCR
           const canvas = document.createElement("canvas");
           const context = canvas.getContext("2d");
           canvas.height = viewport.height;
@@ -42,11 +42,13 @@ const App = () => {
 
           const worker = await createWorker("eng");
           await worker.setParameters({
-            tessedit_char_whitelist: "0123456789",
+            tessedit_char_whitelist: "0123456789", // Only digits
           });
 
           const { data: { text } } = await worker.recognize(canvas);
           await worker.terminate();
+
+          console.log(`🔍 OCR Output (Page ${pageNum}):`, text);
 
           const cleanedText = text
             .replace(/[O]/g, "0")
