@@ -18,7 +18,7 @@ const App = () => {
   const [processing, setProcessing] = useState(false);
 
   const extractPalletIds = (text) => {
-    const regex = /\b\d{18}\b/g;
+    const regex = /\(00\)\d{18}/g;
     return [...text.matchAll(regex)].map((match) => match[0]);
   };
 
