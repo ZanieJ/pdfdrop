@@ -3,24 +3,27 @@ import { useDropzone } from "react-dropzone";
 import { createWorker } from "tesseract.js";
 import * as pdfjsLib from "pdfjs-dist";
 import { createClient } from "@supabase/supabase-js";
-
 import pdfWorker from "pdfjs-dist/build/pdf.worker?worker";
 
+// Setup PDF.js
 pdfjsLib.GlobalWorkerOptions.workerPort = new pdfWorker();
 
+// Setup Supabase
 const supabase = createClient(
   "https://cassouhzovotgdhzssqg.supabase.co",
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhc3NvdWh6b3ZvdGdkaHpzc3FnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkxMTg5MjYsImV4cCI6MjA2NDY5NDkyNn0.dNg51Yn9aplsyAP9kvsEQOTHWb64edsAk5OqiynEZlk"
 );
 
+// Extract pallet IDs using flexible regex
+const extractPalletIds = (text) => {
+  const regex = /\(00\)?(\d{18})|\b\d{18}\b/g;
+  const matches = [...text.matchAll(regex)].map((m) => m[1] || m[0]);
+  return matches;
+};
+
 const App = () => {
   const [results, setResults] = useState([]);
   const [processing, setProcessing] = useState(false);
-
-  const extractPalletIds = (text) => {
-    const regex = /\b\d{18}\b/g;
-    return [...text.matchAll(regex)].map((match) => match[0]);
-  };
 
   const onDrop = useCallback(async (acceptedFiles) => {
     setProcessing(true);
@@ -40,12 +43,21 @@ const App = () => {
           canvas.width = viewport.width;
           await page.render({ canvasContext: context, viewport }).promise;
 
+          // OCR mode
           const worker = await createWorker("eng");
-          const { data: { text } } = await worker.recognize(canvas);
+          const { data: { text: ocrText } } = await worker.recognize(canvas);
           await worker.terminate();
+          const ocrIds = extractPalletIds(ocrText);
 
-          const ids = extractPalletIds(text);
-          ids.forEach((id) => {
+          // Embedded PDF text mode (good for tables)
+          const textContent = await page.getTextContent();
+          const pdfText = textContent.items.map((item) => item.str).join(" ");
+          const tableIds = extractPalletIds(pdfText);
+
+          // Merge and deduplicate
+          const allIds = [...new Set([...ocrIds, ...tableIds])];
+
+          allIds.forEach((id) => {
             finalResults.push({
               pallet_id: id,
               document_name: file.name,
@@ -63,7 +75,10 @@ const App = () => {
     setProcessing(false);
   }, []);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop, accept: { "application/pdf": [] } });
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: { "application/pdf": [] }
+  });
 
   const uploadToSupabase = async () => {
     const { error } = await supabase.from("NDAs").insert(results);
